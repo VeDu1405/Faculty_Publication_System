@@ -7,11 +7,11 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-export async function apiRequest(
+export async function apiRequest<T = unknown>(
   method: string,
   url: string,
-  data?: unknown | undefined,
-): Promise<Response> {
+  data?: unknown,
+): Promise<T> {
   const res = await fetch(url, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
@@ -20,10 +20,31 @@ export async function apiRequest(
   });
 
   await throwIfResNotOk(res);
-  return res;
+
+  const contentType = res.headers.get("Content-Type");
+  if (contentType && contentType.includes("application/json")) {
+    return res.json() as Promise<T>;
+  }
+
+  // Return empty object if no JSON (like 204 No Content)
+  return {} as T;
 }
 
+// Convenience wrappers
+export const apiGet = <T = unknown>(url: string) =>
+  apiRequest<T>("GET", url);
+
+export const apiPost = <T = unknown>(url: string, data?: unknown) =>
+  apiRequest<T>("POST", url, data);
+
+export const apiPut = <T = unknown>(url: string, data?: unknown) =>
+  apiRequest<T>("PUT", url, data);
+
+export const apiDelete = <T = unknown>(url: string) =>
+  apiRequest<T>("DELETE", url);
+
 type UnauthorizedBehavior = "returnNull" | "throw";
+
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
@@ -34,11 +55,11 @@ export const getQueryFn: <T>(options: {
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+      return null as T;
     }
 
     await throwIfResNotOk(res);
-    return await res.json();
+    return (await res.json()) as T;
   };
 
 export const queryClient = new QueryClient({
